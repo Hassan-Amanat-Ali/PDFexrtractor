@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Error — MEP Extractor{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:620px;margin:60px auto;">
+  <h2 style="color:#dc2626;">Analysis Failed</h2>
+  <p><strong>File:</strong> {{ filename }}</p>
+  <pre class="error-pre">{{ error }}</pre>
+  <a href="{{ url_for('index') }}" class="btn btn-primary" style="margin-top:16px;">Try another file</a>
+</div>
+{% endblock %}

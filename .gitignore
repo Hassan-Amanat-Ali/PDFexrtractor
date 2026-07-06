@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+dist/
+build/
+uploads/
+samples/
+training_data/
+newprojecttdbank/
+*.spec
+*.exe
+*.dwg
+.env
+venv/
+*.egg-info/
+.DS_Store

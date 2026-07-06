@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}MEP Extractor{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  {% if session.get('logged_in') %}
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="logo">MEP Component Extractor</span>
+    </div>
+    <div class="topbar-right">
+      <span class="user-label">{{ username }}</span>
+      <a href="{{ url_for('index') }}" class="btn btn-sm btn-ghost">New Analysis</a>
+      <a href="{{ url_for('logout') }}" class="btn btn-sm btn-ghost">Log out</a>
+    </div>
+  </header>
+  {% endif %}
+
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

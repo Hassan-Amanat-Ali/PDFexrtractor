@@ -1,0 +1,463 @@
+{% extends "base.html" %}
+{% block title %}Results — {{ filename }}{% endblock %}
+
+{% block head %}
+<style>
+  /* ── layout ── */
+  .results-header { display:flex; align-items:center; justify-content:space-between;
+                    flex-wrap:wrap; gap:12px; margin-bottom:20px; }
+  .drawing-meta   { font-size:.9rem; color:#6b7280; }
+  .download-group { display:flex; gap:8px; flex-wrap:wrap; }
+
+  /* ── map toggle ── */
+  .map-toggle { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+  .map-toggle label { font-weight:600; cursor:pointer; }
+  .map-panel  { background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px;
+                padding:12px; margin-bottom:20px; }
+  .map-panel.hidden { display:none; }
+
+  /* ── toolbar row above map ── */
+  .map-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .map-tab { padding:5px 14px; border:1px solid #d1d5db; border-radius:6px;
+              cursor:pointer; font-size:.85rem; background:#fff; }
+  .map-tab.active { background:#3b82f6; color:#fff; border-color:#3b82f6; }
+
+  .zoom-controls { display:flex; align-items:center; gap:4px; margin-left:8px; }
+  .zoom-btn { width:28px; height:28px; border:1px solid #d1d5db; border-radius:6px;
+               background:#fff; font-size:1.1rem; line-height:1; cursor:pointer;
+               display:flex; align-items:center; justify-content:center;
+               font-weight:700; color:#374151; }
+  .zoom-btn:hover { background:#f3f4f6; }
+  .zoom-label { min-width:44px; text-align:center; font-size:.82rem;
+                font-weight:600; color:#374151; user-select:none; }
+  .zoom-fit-btn { padding:3px 10px; border:1px solid #d1d5db; border-radius:6px;
+                  background:#fff; font-size:.8rem; cursor:pointer; color:#374151; }
+  .zoom-fit-btn:hover { background:#f3f4f6; }
+
+  .highlight-hint { font-size:.82rem; color:#6b7280; margin-left:auto;
+                    font-style:italic; white-space:nowrap; }
+
+  /* ── map viewport ── */
+  .map-img-wrap {
+    overflow: auto;
+    max-height: 640px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: #f3f4f6;
+    position: relative;
+    cursor: grab;
+    user-select: none;
+  }
+  .map-img-wrap.panning { cursor: grabbing; }
+
+  /* inner div grows with zoom — gives the scrollbar the right range */
+  #map-inner {
+    position: relative;
+    display: inline-block;
+    line-height: 0;
+  }
+  #map-img    { display: block; }
+  #hl-canvas  { position: absolute; top: 0; left: 0; pointer-events: none; }
+
+  .map-placeholder { padding:40px; text-align:center; color:#9ca3af; font-style:italic; }
+
+  /* ── table ── */
+  .comp-table-wrap { overflow-x:auto; }
+  .comp-table { width:100%; border-collapse:collapse; font-size:.9rem; }
+  .comp-table th { background:#f3f4f6; font-weight:700; padding:9px 12px;
+                   text-align:left; border-bottom:2px solid #e5e7eb; white-space:nowrap; }
+  .comp-table td { padding:7px 12px; border-bottom:1px solid #f3f4f6; vertical-align:top; }
+  .comp-table td.ids { font-family:monospace; font-size:.8rem; color:#374151; }
+  .comp-table tbody tr { cursor:pointer; }
+  .comp-table tbody tr:hover td { filter:brightness(.95); }
+  .comp-table tbody tr.selected td { outline:2px solid #3b82f6; outline-offset:-2px; }
+  .comp-table tbody tr.selected td:first-child { border-left:4px solid #3b82f6; }
+  .total-row td { font-weight:700; background:#f3f4f6; border-top:2px solid #e5e7eb; cursor:default; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="results-header">
+  <div>
+    <h2>{{ filename }}</h2>
+    <p class="drawing-meta">
+      {% if drawing_number %}Drawing: <strong>{{ drawing_number }}</strong>{% endif %}
+      {% if floor_level %} &nbsp;·&nbsp; Level: <strong>{{ floor_level }}</strong>{% endif %}
+      &nbsp;·&nbsp; <strong>{{ grand_total }}</strong> components identified
+    </p>
+  </div>
+  <div class="download-group">
+    <a href="{{ url_for('download', job_id=job_id, fmt='excel') }}"
+       class="btn btn-primary">⬇ Excel report</a>
+    <a href="{{ url_for('download', job_id=job_id, fmt='text') }}"
+       class="btn btn-ghost">⬇ Text report</a>
+    <a href="{{ url_for('index') }}" class="btn btn-ghost">New analysis</a>
+  </div>
+</div>
+
+<!-- ── Map panel ─────────────────────────────────────────────────────────── -->
+{% if has_map %}
+<div class="map-toggle">
+  <input type="checkbox" id="show-map" checked>
+  <label for="show-map">Show annotated map</label>
+</div>
+<div class="map-panel" id="map-panel">
+
+  <div class="map-toolbar">
+    <button class="map-tab active" onclick="switchMap(1, this)">Stage 1 — text</button>
+    <button class="map-tab"       onclick="switchMap(2, this)">Stage 2 — vectors</button>
+
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="zoomBy(-0.25)" title="Zoom out">−</button>
+      <span   class="zoom-label" id="zoom-label">100%</span>
+      <button class="zoom-btn" onclick="zoomBy(+0.25)" title="Zoom in">+</button>
+      <button class="zoom-fit-btn" onclick="resetZoom()" title="Fit to window">Fit</button>
+    </div>
+
+    <span class="highlight-hint" id="active-hint"></span>
+  </div>
+
+  <div class="map-img-wrap" id="map-wrap">
+    <div id="map-inner">
+      <img id="map-img"
+           src="{{ url_for('serve_map', job_id=job_id, stage=1) }}"
+           alt="Annotated drawing"
+           draggable="false">
+      <canvas id="hl-canvas"></canvas>
+    </div>
+  </div>
+
+  <p style="font-size:.78rem;color:#9ca3af;margin-top:6px;">
+    Scroll wheel to zoom &nbsp;·&nbsp; Click &amp; drag to pan &nbsp;·&nbsp;
+    Click a table row to highlight that component
+  </p>
+</div>
+{% else %}
+<div class="map-panel">
+  <p class="map-placeholder">Map not available (requires PyMuPDF + Pillow).</p>
+</div>
+{% endif %}
+
+<!-- ── Component table ────────────────────────────────────────────────────── -->
+<div class="card">
+  <h3 style="margin-top:0;">Component Schedule
+    <span style="font-size:.82rem;font-weight:400;color:#6b7280;margin-left:8px;">
+      — click any row to highlight on map
+    </span>
+  </h3>
+  <div class="comp-table-wrap">
+    <table class="comp-table" id="comp-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Category</th>
+          <th>Code</th>
+          <th>Full Name</th>
+          <th>Component IDs</th>
+          <th>Qty</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set ns = namespace(row_num=1) %}
+        {% for row in rows %}
+        <tr style="background-color:{{ row.colour }};" data-code="{{ row.code }}">
+          <td>{{ ns.row_num }}</td>
+          <td>{{ row.cat }}</td>
+          <td><strong>{{ row.code }}</strong></td>
+          <td>{{ row.full_name }}</td>
+          <td class="ids">{{ row.ids }}</td>
+          <td style="text-align:right;font-weight:600;">{{ row.count }}</td>
+        </tr>
+        {% set ns.row_num = ns.row_num + 1 %}
+        {% endfor %}
+
+        {% if unlab %}
+        {% for u in unlab %}
+        <tr style="background:#FFF3CD;" data-code="{{ u.fingerprint_code }}">
+          <td>{{ ns.row_num }}</td>
+          <td>Ventilation</td>
+          <td><strong>{{ u.fingerprint_code }}</strong></td>
+          <td>{% if u.fingerprint_code == 'ATT' %}In-Duct Attenuator / Silencer (unlabelled)
+              {% else %}Crosstalk Attenuator (unlabelled){% endif %}</td>
+          <td class="ids" style="color:#92400e;">
+            Page {{ u.page_num + 1 }}, approx. ({{ "%.0f"|format(u.bbox[0]) }},
+            {{ "%.0f"|format(u.bbox[1]) }})
+          </td>
+          <td style="text-align:right;font-weight:600;">1</td>
+        </tr>
+        {% set ns.row_num = ns.row_num + 1 %}
+        {% endfor %}
+        {% endif %}
+      </tbody>
+      <tfoot>
+        <tr class="total-row">
+          <td colspan="5" style="text-align:right;">Total components</td>
+          <td style="text-align:right;">{{ grand_total + unlab|length }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  {% if unlab %}
+  <p style="margin-top:12px;font-size:.85rem;color:#92400e;">
+    ⚠ {{ unlab|length }} unlabelled attenuator body/bodies detected by vector fingerprint
+    (highlighted in gold). These are not assigned an ID in the drawing.
+  </p>
+  {% endif %}
+</div>
+
+<script>
+const JOB_ID  = {{ job_id | tojson }};
+const HAS_MAP = {{ has_map | tojson }};
+
+{% if has_map %}
+// ── elements ──────────────────────────────────────────────────────────────────
+const mapWrap   = document.getElementById('map-wrap');
+const mapInner  = document.getElementById('map-inner');
+const mapImg    = document.getElementById('map-img');
+const hlCanvas  = document.getElementById('hl-canvas');
+const ctx       = hlCanvas.getContext('2d');
+const zoomLabel = document.getElementById('zoom-label');
+const activeHint = document.getElementById('active-hint');
+
+// ── state ─────────────────────────────────────────────────────────────────────
+let posData      = null;
+let selectedCode = null;
+let currentPage  = 0;
+let zoomLevel    = 1.0;
+const MIN_ZOOM   = 0.2;
+const MAX_ZOOM   = 8.0;
+
+// ── fetch positions ───────────────────────────────────────────────────────────
+fetch('/positions/' + JOB_ID)
+  .then(r => r.json())
+  .then(data => { posData = data; })
+  .catch(() => {});
+
+// ── zoom helpers ──────────────────────────────────────────────────────────────
+function applyZoom() {
+  if (!mapImg.naturalWidth) return;
+  const w = Math.round(mapImg.naturalWidth  * zoomLevel);
+  const h = Math.round(mapImg.naturalHeight * zoomLevel);
+  mapImg.style.width   = w + 'px';
+  mapImg.style.height  = h + 'px';
+  hlCanvas.style.width  = w + 'px';
+  hlCanvas.style.height = h + 'px';
+  zoomLabel.textContent = Math.round(zoomLevel * 100) + '%';
+  redraw();
+}
+
+function zoomBy(delta, pivotX, pivotY) {
+  const oldZoom = zoomLevel;
+  zoomLevel = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoomLevel + delta));
+  if (zoomLevel === oldZoom) return;
+
+  // keep the point under the cursor fixed while zooming
+  if (pivotX !== undefined) {
+    const ratio = zoomLevel / oldZoom;
+    mapWrap.scrollLeft = (mapWrap.scrollLeft + pivotX) * ratio - pivotX;
+    mapWrap.scrollTop  = (mapWrap.scrollTop  + pivotY) * ratio - pivotY;
+  }
+  applyZoom();
+}
+
+function resetZoom() {
+  // fit to the visible width of the wrap
+  const wrapW = mapWrap.clientWidth - 2;
+  if (mapImg.naturalWidth) {
+    zoomLevel = Math.min(1.0, wrapW / mapImg.naturalWidth);
+  } else {
+    zoomLevel = 1.0;
+  }
+  mapWrap.scrollLeft = 0;
+  mapWrap.scrollTop  = 0;
+  applyZoom();
+}
+
+// sync canvas coordinate space to natural image size; called on each img load
+function syncCanvas() {
+  hlCanvas.width  = mapImg.naturalWidth;
+  hlCanvas.height = mapImg.naturalHeight;
+  resetZoom();   // fit to window on first load; keeps zoom on stage switch
+}
+mapImg.addEventListener('load', syncCanvas);
+
+// ── scroll-wheel zoom ─────────────────────────────────────────────────────────
+mapWrap.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const rect   = mapWrap.getBoundingClientRect();
+  const pivotX = e.clientX - rect.left;   // cursor position inside the wrap
+  const pivotY = e.clientY - rect.top;
+  const step   = e.deltaY < 0 ? 0.07 : -0.07;
+  zoomBy(step, pivotX, pivotY);
+}, { passive: false });
+
+// ── pinch-to-zoom (touch) ─────────────────────────────────────────────────────
+let lastTouchDist = null;
+mapWrap.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 2) lastTouchDist = Math.hypot(
+    e.touches[0].clientX - e.touches[1].clientX,
+    e.touches[0].clientY - e.touches[1].clientY
+  );
+}, { passive: true });
+mapWrap.addEventListener('touchmove', (e) => {
+  if (e.touches.length !== 2 || lastTouchDist === null) return;
+  e.preventDefault();
+  const dist = Math.hypot(
+    e.touches[0].clientX - e.touches[1].clientX,
+    e.touches[0].clientY - e.touches[1].clientY
+  );
+  const ratio = dist / lastTouchDist;
+  // dampen pinch: interpolate 30% toward the raw ratio to reduce sensitivity
+  const dampedRatio = 1 + (ratio - 1) * 0.3;
+  zoomLevel = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoomLevel * dampedRatio));
+  lastTouchDist = dist;
+  applyZoom();
+}, { passive: false });
+mapWrap.addEventListener('touchend', () => { lastTouchDist = null; });
+
+// ── drag to pan ───────────────────────────────────────────────────────────────
+let panning = false, panStart = {}, scrollStart = {};
+
+mapWrap.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  panning     = true;
+  panStart    = { x: e.clientX, y: e.clientY };
+  scrollStart = { x: mapWrap.scrollLeft, y: mapWrap.scrollTop };
+  mapWrap.classList.add('panning');
+});
+window.addEventListener('mousemove', (e) => {
+  if (!panning) return;
+  mapWrap.scrollLeft = scrollStart.x - (e.clientX - panStart.x);
+  mapWrap.scrollTop  = scrollStart.y - (e.clientY - panStart.y);
+});
+window.addEventListener('mouseup', () => {
+  panning = false;
+  mapWrap.classList.remove('panning');
+});
+
+// ── switch stage ──────────────────────────────────────────────────────────────
+function switchMap(stage, btn) {
+  document.querySelectorAll('.map-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  // keep current zoom level; syncCanvas/resetZoom fires on load only first time
+  const prevZoom = zoomLevel;
+  mapImg.onload = () => {
+    hlCanvas.width  = mapImg.naturalWidth;
+    hlCanvas.height = mapImg.naturalHeight;
+    zoomLevel = prevZoom;   // preserve zoom across stage switch
+    applyZoom();
+  };
+  mapImg.src = '/map/' + JOB_ID + '/' + stage + '?t=' + Date.now();
+}
+
+// override the earlier listener added via addEventListener
+mapImg.addEventListener('load', () => {});  // no-op; switchMap sets onload directly
+
+// ── map toggle ────────────────────────────────────────────────────────────────
+document.getElementById('show-map').addEventListener('change', function () {
+  document.getElementById('map-panel').classList.toggle('hidden', !this.checked);
+});
+
+// ── highlight redraw ──────────────────────────────────────────────────────────
+function redraw() {
+  ctx.clearRect(0, 0, hlCanvas.width, hlCanvas.height);
+  if (!posData || !selectedCode) return;
+
+  const boxes = (posData.components[selectedCode] || []).filter(b => b.page === currentPage);
+
+  // dim everything
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(0, 0, hlCanvas.width, hlCanvas.height);
+
+  if (!boxes.length) return;
+
+  boxes.forEach(b => {
+    const isUnlab      = !!b.unlabelled;
+    const strokeColour = isUnlab ? '#fbbf24' : '#facc15';
+    const fillColour   = isUnlab ? 'rgba(251,191,36,0.30)' : 'rgba(250,204,21,0.25)';
+
+    // punch a clear hole through the dim layer
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = 'rgba(0,0,0,1)';
+    ctx.fillRect(b.x0 - 4, b.y0 - 4, (b.x1 - b.x0) + 8, (b.y1 - b.y0) + 8);
+    ctx.restore();
+
+    // bright border + fill
+    ctx.fillStyle   = fillColour;
+    ctx.strokeStyle = strokeColour;
+    ctx.lineWidth   = 3;
+    ctx.fillRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
+    ctx.strokeRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
+
+    // label pill above box
+    const label = b.id;
+    ctx.font = 'bold 12px sans-serif';
+    const tw = ctx.measureText(label).width;
+    const ph = 16, pw = tw + 8;
+    const px = b.x0, py = b.y0 - ph - 2;
+    ctx.fillStyle = strokeColour;
+    ctx.beginPath();
+    ctx.roundRect(px, py, pw, ph, 4);
+    ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.fillText(label, px + 4, py + ph - 4);
+  });
+}
+{% endif %}
+
+// ── row click → highlight ─────────────────────────────────────────────────────
+document.querySelectorAll('#comp-table tbody tr[data-code]').forEach(row => {
+  row.addEventListener('click', () => {
+    const code = row.dataset.code;
+
+    if (selectedCode === code) {
+      selectedCode = null;
+      document.querySelectorAll('#comp-table tbody tr.selected')
+              .forEach(r => r.classList.remove('selected'));
+      {% if has_map %}
+      ctx.clearRect(0, 0, hlCanvas.width, hlCanvas.height);
+      activeHint.textContent = '';
+      {% endif %}
+      return;
+    }
+
+    document.querySelectorAll('#comp-table tbody tr.selected')
+            .forEach(r => r.classList.remove('selected'));
+    document.querySelectorAll(`#comp-table tbody tr[data-code="${CSS.escape(code)}"]`)
+            .forEach(r => r.classList.add('selected'));
+    selectedCode = code;
+
+    {% if has_map %}
+    const count = posData
+      ? (posData.components[code] || []).filter(b => b.page === currentPage).length
+      : 0;
+    activeHint.textContent = count
+      ? `Showing ${count} ${code} location${count !== 1 ? 's' : ''} on map`
+      : `No map positions found for ${code}`;
+    redraw();
+
+    // scroll first highlighted box into the centre of the viewport
+    if (posData && count) {
+      const first = (posData.components[code] || []).find(b => b.page === currentPage);
+      if (first) {
+        const cx = (first.x0 + first.x1) / 2 * zoomLevel;
+        const cy = (first.y0 + first.y1) / 2 * zoomLevel;
+        mapWrap.scrollLeft = cx - mapWrap.clientWidth  / 2;
+        mapWrap.scrollTop  = cy - mapWrap.clientHeight / 2;
+      }
+    }
+
+    document.getElementById('map-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    {% endif %}
+  });
+});
+</script>
+{% endblock %}

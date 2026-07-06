@@ -1,0 +1,302 @@
+{
+  "FCU": {
+    "full_name": "Fan Coil Unit",
+    "category": "HVAC Equipment",
+    "notes": "Ceiling/wall/cassette mounted air conditioning unit (2-pipe or 4-pipe). Brands: Daikin FXDQ/FXSA/FXNQ, Mitsubishi PEFY/PCFY/PFFY, Toshiba RAV, Ability AIR EVO270P (4-pipe). Code pattern: FCU-00-01. [Confirmed: sets.dxf legend + S70992-02-Schedule FCU 4Pipe.xlsx]"
+  },
+  "BCB": {
+    "full_name": "Branch Controller Box",
+    "category": "HVAC Equipment",
+    "notes": "Mitsubishi VRF refrigerant distribution box. Available in 4, 6, 24 and 32 port configurations. [Confirmed: sets.dxf legend 'Mitsubishi BC Boxes & Lossnay']"
+  },
+  "BS": {
+    "full_name": "Branch Selector (Daikin VRV)",
+    "category": "HVAC Equipment",
+    "notes": "Daikin VRV branch selector — switches individual FCUs between heating and cooling mode. Models: BS-8-Q14A (8 port), BS-10-Q14A (10 port). NOT a water booster set. [Confirmed: sets.dxf blocks _CEMS_Dai BS-8-Q14A, _CEMS_Dai BS-10-Q14A]"
+  },
+  "BSB": {
+    "full_name": "Branch Selector Box (Daikin VRV)",
+    "category": "HVAC Equipment",
+    "notes": "Daikin VRV individual branch selector box. Model: BS1Q10A7V1B. Dimensions: 388x326x207mm. [Confirmed: sets.dxf block]"
+  },
+  "HRU": {
+    "full_name": "Heat Recovery Unit",
+    "category": "HVAC Equipment",
+    "notes": "Mechanical ventilation with heat recovery (MVHR). Brands: Mitsubishi Lossnay LGH series, Toshiba VN-250SE/VN-800SE/VN-1000SAE. [Confirmed: sets.dxf legend 'Mitsubishi BC Boxes & Lossnay']"
+  },
+  "VAV": {
+    "full_name": "Variable Air Volume Unit",
+    "category": "HVAC Equipment",
+    "notes": "Variable air volume terminal unit controlling airflow to individual zones. Code pattern: VAV-00-01. [Confirmed: sets.dxf block _CEMS_Flow Rate VAV Anno]"
+  },
+  "VRV": {
+    "full_name": "Variable Refrigerant Volume / VRF Outdoor Unit",
+    "category": "HVAC Equipment",
+    "notes": "Outdoor condensing/heat pump unit for VRV/VRF system. Brands: Daikin REYQ/RZAG, Mitsubishi PURY/PURY-EP. [Confirmed: sets.dxf blocks PURY-P400YNW, Daikin REYQ8-12]"
+  },
+  "CDU": {
+    "full_name": "Condensing Unit",
+    "category": "HVAC Equipment",
+    "notes": "External refrigerant condensing unit. [Confirmed: sets.dxf legend 'FCUs & Condensers']"
+  },
+  "AHU": {
+    "full_name": "Air Handling Unit",
+    "category": "HVAC Equipment",
+    "notes": "Central air handling unit serving multiple zones. [Project drawings — not in sets.dxf]"
+  },
+  "CAHU": {
+    "full_name": "Ceiling Air Handling Unit",
+    "category": "HVAC Equipment",
+    "notes": "Ceiling-mounted air handling unit. [Project drawings — not in sets.dxf]"
+  },
+  "CRU": {
+    "full_name": "Comms Room Cooling Unit",
+    "category": "HVAC Equipment",
+    "notes": "Dedicated precision cooling / CRAC unit for server or comms rooms. [Confirmed: sets.dxf block _CEMS_Drip Tray CRAC Units]"
+  },
+  "SER": {
+    "full_name": "Server / Comms Room A/C Indoor Unit",
+    "category": "HVAC Equipment",
+    "notes": "Wall/ceiling split A/C indoor unit for server or comms room. Brands: Mitsubishi PKA-M100KA, Daikin FTXM/FAA series. Paired with SERCU condensing unit. [Confirmed: TD Bank project SER-02-01/02/03 + S70992-02-Schedule Comms AC.xlsx]"
+  },
+  "SERCU": {
+    "full_name": "Server / Comms Room Condensing Unit",
+    "category": "HVAC Equipment",
+    "notes": "Outdoor condensing unit paired with a SER indoor unit. Brands: Daikin RXM/AZAS series. [Confirmed: TD Bank project + S70992-02-Schedule Comms AC.xlsx]"
+  },
+  "MER": {
+    "full_name": "Main Equipment Room A/C Unit",
+    "category": "HVAC Equipment",
+    "notes": "Precision A/C unit for main equipment/plant rooms. Brand: Stulz ASD series. [Confirmed: TD Bank project MER-02-01/02]"
+  },
+  "MERCU": {
+    "full_name": "Main Equipment Room Condensing Unit",
+    "category": "HVAC Equipment",
+    "notes": "Outdoor condensing unit paired with a MER indoor unit. [Confirmed: TD Bank project]"
+  },
+  "EPH": {
+    "full_name": "Electric Panel Heater",
+    "category": "HVAC Equipment",
+    "notes": "Electric radiant or convector panel heater. [Confirmed: sample2.pdf EPH-02-01/02]"
+  },
+  "RAD": {
+    "full_name": "Radiator",
+    "category": "HVAC Equipment",
+    "notes": "Hot water panel radiator. [Confirmed: sets.dxf legend 'Radiator']"
+  },
+  "CT": {
+    "full_name": "Cooling Tower",
+    "category": "HVAC Equipment",
+    "notes": "Open or closed-circuit cooling tower for heat rejection. [Confirmed: TD Bank project CT/02/01-12]"
+  },
+  "CTM": {
+    "full_name": "Cooling Tower — Master Unit",
+    "category": "HVAC Equipment",
+    "notes": "Master / primary unit in a multi-cell cooling tower. [Confirmed: TD Bank project CTM-01]"
+  },
+  "CTE": {
+    "full_name": "Cooling Tower — Expansion Unit",
+    "category": "HVAC Equipment",
+    "notes": "Expansion / satellite unit in a multi-cell cooling tower. [Confirmed: TD Bank project CTE-02]"
+  },
+  "CTX": {
+    "full_name": "Cooling Tower — Cross-Flow Unit",
+    "category": "HVAC Equipment",
+    "notes": "Cross-flow type cooling tower cell. [Confirmed: TD Bank project CTX-01]"
+  },
+  "CTP": {
+    "full_name": "Cooling Tower — Pump Set",
+    "category": "HVAC Equipment",
+    "notes": "Pump set integral to a cooling tower system. [Confirmed: TD Bank project CTP-01]"
+  },
+  "CTS": {
+    "full_name": "Cooling Tower — Slave Unit",
+    "category": "HVAC Equipment",
+    "notes": "Slave / secondary unit in a multi-cell cooling tower. [Confirmed: TD Bank project CTS-01]"
+  },
+  "WP": {
+    "full_name": "Waste Pump",
+    "category": "HVAC Equipment",
+    "notes": "Submersible or inline pump for waste water / condensate drainage. Brands: Pump Technology DrainMinor PTL30, DrainMajor PTL60/PTL60(H), Grundfos Sololift2 WC-3, Saniflo Saniaccess 3. [Confirmed: sets.dxf blocks + S70992-02-Schedule Waste Pump.xlsx]"
+  },
+  "WH": {
+    "full_name": "Water Heater",
+    "category": "HVAC Equipment",
+    "notes": "Electric point-of-use water heater or unvented hot water cylinder. Brands: Ariston Andris Lux (6L–30L), Heatrae Streamline, Megaflo. [Confirmed: sets.dxf blocks + S70992-02-Schedule Water Heater.xlsx]"
+  },
+  "SAN": {
+    "full_name": "Sanitary Macerator / Pump",
+    "category": "HVAC Equipment",
+    "notes": "Macerator pump for WC/shower waste. Brands: Saniaccess 3, Sani-shower pump. [Confirmed: sets.dxf blocks _CEMS_Saniaccess 3, _CEMS_Sani-shower pump]"
+  },
+  "ZT": {
+    "full_name": "Zip Hydrotap / Filtered Water Point",
+    "category": "HVAC Equipment",
+    "notes": "Filtered, chilled and/or boiling water tap. Brand: Zip BCS1201125 Hydrotap. [Confirmed: sets.dxf blocks _CEMS_Zip tap, ZIP BCS1201125 hydrotap]"
+  },
+  "DSF": {
+    "full_name": "Destratification Fan",
+    "category": "HVAC Equipment",
+    "notes": "Ceiling-mounted fan to destratify warm air in high-ceiling spaces. Brand: Airius Standard 10-25. [Confirmed: sets.dxf block Airius Standard 10-25]"
+  },
+  "XTA": {
+    "full_name": "Crosstalk Attenuator",
+    "category": "Ventilation",
+    "notes": "Crosstalk (sound-break) attenuator fitted at ceiling void to prevent sound transmission between adjacent rooms via shared ductwork. [Confirmed: sets.dxf legend 'CROSSTALK ATTENUATORS' + S70992-02-Schedule ATT.xlsx — Type: Cross Talk, SAS Ceiling, 150–400mm wide]"
+  },
+  "ATT": {
+    "full_name": "In-Duct Attenuator / Silencer",
+    "category": "Ventilation",
+    "notes": "Rectangular in-duct acoustic attenuator / silencer to reduce fan and airflow noise. [Confirmed: sets.dxf legend 'ATTENUATOR / SILENCER' + S70992 + S71013 legends]"
+  },
+  "GEF": {
+    "full_name": "General / Server Room Extract Fan",
+    "category": "Ventilation",
+    "notes": "Roof-mounted axial extract fan for server/comms rooms or general large-duty extract. Brand: FlaktWoods JM Aerofoil (TD Bank: 45JM/16/4/5/14, 885 l/s). Also S&P (Soler & Palau) in other projects. Code GEF-XX-01. [Confirmed: sets.dxf legend + S70992-02-Schedule Extract Fan.xlsx]"
+  },
+  "EF": {
+    "full_name": "Extract Fan",
+    "category": "Ventilation",
+    "notes": "Room extract fan for tea points, copy rooms, WC areas etc. [Confirmed: sets.dxf attribute EF=EF + _CEMS_Extract Fan Detail block]"
+  },
+  "IEF": {
+    "full_name": "In-line Extract Fan",
+    "category": "Ventilation",
+    "notes": "Compact inline duct-mounted extract fan. [Confirmed: sets.dxf legend 'In-line Extract Fan']"
+  },
+  "SEF": {
+    "full_name": "Server / Specialist Extract Fan",
+    "category": "Ventilation",
+    "notes": "Dedicated extract fan for server or specialist rooms. Brand: FlaktWoods JM Aerofoil. [Confirmed: TD Bank project SEF-02-01 to SEF-02-05]"
+  },
+  "WCEF": {
+    "full_name": "WC Extract Fan",
+    "category": "Ventilation",
+    "notes": "Dedicated extract fan for WC / toilet areas. [Confirmed: TD Bank project + sets.dxf Extract Fan Detail mentions WC extract]"
+  },
+  "LCD": {
+    "full_name": "Cut Back Linear Diffuser",
+    "category": "Ventilation",
+    "notes": "Linear slot supply air diffuser, cut back to fit ceiling. Products: EPIC (600-1800mm), Highline 270 (Size 06-18). [Confirmed: sets.dxf legend 'Cut Back Linear Diffuser']"
+  },
+  "SG": {
+    "full_name": "Supply Grille / Linear Slot Diffuser",
+    "category": "Ventilation",
+    "notes": "Ceiling or wall-mounted supply air grille or linear slot diffuser. Manufacturer: JPR SLD-25 (TD Bank). SG-NNN-A references may appear multiple times per grille in schedules. [Confirmed: sets.dxf code SG-01-01 + S70992-02-Schedule Grille.xlsx]"
+  },
+  "RG": {
+    "full_name": "Return / Relief Grille",
+    "category": "Ventilation",
+    "notes": "Return air or relief grille. [Confirmed: sets.dxf code RG-01-01 in model space]"
+  },
+  "EG": {
+    "full_name": "Extract Grille",
+    "category": "Ventilation",
+    "notes": "Ceiling or wall-mounted extract air grille. [Confirmed: sample2.pdf EG-02-02 to EG-02-06 + TD Bank project]"
+  },
+  "LG": {
+    "full_name": "Louvre / Transfer Grille",
+    "category": "Ventilation",
+    "notes": "Door or wall louvre / transfer grille. [Confirmed: sets.dxf legend 'Louvre & Transfer Grille']"
+  },
+  "FG": {
+    "full_name": "Floor Grille",
+    "category": "Ventilation",
+    "notes": "Floor-mounted supply or return grille. [Confirmed: TD Bank project FG-2A]"
+  },
+  "FD": {
+    "full_name": "Fire Damper",
+    "category": "Fire Safety",
+    "notes": "Intumescent fire damper at fire/smoke compartment boundaries, fitted with access panel. Manufacturer: BSB FD Series (60-min rating). [Confirmed: sets.dxf legend + S70992-02-Schedule Fire Damper.xlsx]"
+  },
+  "SD": {
+    "full_name": "Smoke Damper",
+    "category": "Fire Safety",
+    "notes": "Motorised smoke damper. [Confirmed: sets.dxf legend 'Smoke']"
+  },
+  "FSD": {
+    "full_name": "Fire & Smoke Damper",
+    "category": "Fire Safety",
+    "notes": "Combined fire and smoke damper. [Confirmed: sets.dxf legend 'Fire & Smoke']"
+  },
+  "MFSD": {
+    "full_name": "Motorised Fire / Smoke Damper",
+    "category": "Fire Safety",
+    "notes": "Electrically actuated combined fire and smoke damper connected to fire alarm. [Confirmed: sample2.pdf MFSD-02-01 to MFSD-02-03]"
+  },
+  "VCD": {
+    "full_name": "Volume Control Damper",
+    "category": "Controls",
+    "notes": "Manual duct balancing / volume control damper. [Confirmed: sets.dxf legend 'VCD']"
+  },
+  "MCD": {
+    "full_name": "Motorised Control Damper",
+    "category": "Controls",
+    "notes": "Electrically actuated volume control damper with PIR control. [Confirmed: sets.dxf legend 'MCD' + _CEMS_MCD Arrangement block]"
+  },
+  "NR": {
+    "full_name": "Non-Return Damper",
+    "category": "Controls",
+    "notes": "Prevents backflow of air in ductwork. [Confirmed: sets.dxf legend 'Non-Return']"
+  },
+  "NRD": {
+    "full_name": "Non-Return Damper",
+    "category": "Controls",
+    "notes": "Non-return / check damper preventing backflow. Same device as NR; 'NRD' code used in some drawing sets. [Confirmed: S70992 + S71013 legends 'NON RETURN DAMPER (NRD)']"
+  },
+  "HB": {
+    "full_name": "Heater Battery",
+    "category": "Heating",
+    "notes": "Duct-mounted hot-water or electric heater battery for post-heating of supply air. [Confirmed: S70992 + S71013 legends 'HEATER BATTERY']"
+  },
+  "HBT": {
+    "full_name": "Heater Battery",
+    "category": "Heating",
+    "notes": "Duct-mounted hot-water heater battery. Alternate code for HB used in some drawings."
+  },
+  "C": {
+    "full_name": "AC Controller / Set Point Adjuster",
+    "category": "Controls & Sensors",
+    "notes": "Wall-mounted room controller / set point adjuster for AC unit. Manufacturer: Schneider Electric SpaceLogic SLA (TD Bank project). [Confirmed: sets.dxf legend 'AC Controller' + S70992-02-Schedule AC Controller.xlsx]"
+  },
+  "S": {
+    "full_name": "Temperature Sensor",
+    "category": "Controls & Sensors",
+    "notes": "Room or duct temperature sensor. S2xx/S3xx numbering used in drawings. [Confirmed: sets.dxf legend 'Temp Sensor']"
+  },
+  "CO2": {
+    "full_name": "CO2 Sensor",
+    "category": "Controls & Sensors",
+    "notes": "Carbon dioxide concentration sensor for demand-controlled ventilation. [Confirmed: sets.dxf legend 'CO2 Sensor' + _CEMS_CO2 Sensor block]"
+  },
+  "LD": {
+    "full_name": "Leak Detection Panel",
+    "category": "Controls & Sensors",
+    "notes": "Water leak detection panel (1–16 zone). Brand: Andel Floodline (1-zone, 4-zone, 8-zone, 16-zone). [Confirmed: sets.dxf legend + S70992-02-Schedule Leak Detection.xlsx]"
+  },
+  "PIR": {
+    "full_name": "Passive Infrared Sensor",
+    "category": "Controls & Sensors",
+    "notes": "PIR occupancy/presence sensor used with MCD damper control and FCU switching. Confirmed in sets.dxf: _CEMS_MCD Arrangement wiring diagram."
+  },
+  "SP": {
+    "full_name": "Solenoid Valve",
+    "category": "Controls & Sensors",
+    "notes": "Electrically actuated solenoid shut-off valve on condensate or chilled water pipework. [Confirmed: sets.dxf _CEMS_Leak Detection Schematic 'SOLENOID VALVE CONTROL PANEL / SP']"
+  },
+  "GD": {
+    "full_name": "Gas / Refrigerant Detector",
+    "category": "Controls & Sensors",
+    "notes": "R32 refrigerant gas detector. [Confirmed: sets.dxf layer '_Leak Detection R32' + TD Bank project GD-02-01]"
+  },
+  "PO": {
+    "full_name": "Pipework Outlet",
+    "category": "Pipework",
+    "notes": "Capped or blanked pipework outlet / connection point. [Confirmed: sets.dxf legend 'Pipework Outlets']"
+  },
+  "BV": {
+    "full_name": "Ball / Isolation Valve",
+    "category": "Pipework",
+    "notes": "Isolating ball valve on pipework. Sizes: 150mm, 250mm. [Confirmed: sets.dxf blocks _CEMS_Ball IV 150 L, _CEMS_Ball IV 250 T]"
+  }
+}
