@@ -1,0 +1,24 @@
+[Unit]
+Description=MEP Component Extractor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mep
+Group=mep
+WorkingDirectory=/srv/mep/app
+EnvironmentFile=/etc/mep/mep.env
+ExecStart=/srv/mep/venv/bin/gunicorn --workers 1 --threads 4 --bind 127.0.0.1:5000 --timeout 300 --graceful-timeout 300 --access-logfile - --error-logfile - web_app:app
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=330
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/srv/mep/uploads
+
+[Install]
+WantedBy=multi-user.target

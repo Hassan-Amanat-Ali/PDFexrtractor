@@ -1,267 +1,181 @@
-# VPS Deployment Guide — MEP Component Extractor (Web)
+# VPS deployment: MEP Component Extractor
 
-Tested on Ubuntu 22.04 LTS / Debian 12. Run every command as your non-root sudo user.
+Use Ubuntu 24.04 LTS (Ubuntu 22.04 or Debian 12 also work). A practical starting
+size is 2 vCPU, 4 GB RAM, and 40 GB SSD because PDF/DXF analysis is CPU- and
+memory-intensive. Run the commands below as the normal sudo-enabled account
+provided by the VPS company.
 
----
+## What goes where
 
-## 1. Server preparation
+| Item | VPS location | Owner | Purpose |
+|---|---|---|---|
+| Application repository | `/srv/mep/app` | `mep:mep` | Code, templates, static files, and `sets.dxf` |
+| Python virtual environment | `/srv/mep/venv` | `mep:mep` | Installed Python packages |
+| Uploads and generated reports | `/srv/mep/uploads` | `mep:mep` | Persistent writable job data |
+| Secrets and runtime settings | `/etc/mep/mep.env` | `root:mep`, mode `640` | Login and session secrets |
+| systemd unit | `/etc/systemd/system/mep.service` | `root:root` | Starts and monitors Gunicorn |
+| Nginx site | `/etc/nginx/sites-available/mep` | `root:root` | Public HTTP/HTTPS reverse proxy |
 
-```bash
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y python3 python3-pip python3-venv nginx certbot python3-certbot-nginx
+Do not put passwords in GitHub, `web_app.py`, the systemd unit, or Nginx.
+
+## 1. Point the domain at the VPS (optional initially)
+
+At the DNS provider, create an `A` record for the chosen domain or subdomain
+pointing to the VPS public IPv4 address. You can test by IP first, but a domain
+is needed for the Let's Encrypt HTTPS step.
+
+## 2. Connect and install system packages
+
+From PowerShell on your computer:
+
+```powershell
+ssh YOUR_SSH_USER@YOUR_VPS_IP
 ```
 
----
-
-## 2. Upload the project
-
-From your Windows machine (Git Bash or PowerShell):
+On the VPS:
 
 ```bash
-# Adjust path and user@your.vps.ip as needed
-scp -r "F:/auto extract" user@your.vps.ip:/srv/mep
+sudo apt update
+sudo apt upgrade -y
+sudo apt install -y git python3 python3-pip python3-venv nginx ufw certbot python3-certbot-nginx
 ```
 
-Or with rsync (faster for re-uploads):
+## 3. Create the service account and directories
 
 ```bash
-rsync -avz --exclude __pycache__ --exclude dist --exclude build \
-      "F:/auto extract/" user@your.vps.ip:/srv/mep/
+sudo useradd --system --home-dir /srv/mep --create-home --shell /usr/sbin/nologin mep
+sudo install -d -o mep -g mep -m 0755 /srv/mep/app /srv/mep/uploads
+sudo install -d -o root -g mep -m 0750 /etc/mep
 ```
 
----
-
-## 3. Python virtualenv + dependencies
+If `useradd` says `mep` already exists, continue and run:
 
 ```bash
-cd /srv/mep
-python3 -m venv venv
-source venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements_web.txt
-deactivate
+sudo chown -R mep:mep /srv/mep
 ```
 
----
+## 4. Put the application in `/srv/mep/app`
 
-## 4. Environment variables (credentials)
-
-Create `/srv/mep/.env`:
+After the deployment commit is on GitHub:
 
 ```bash
-cat > /srv/mep/.env << 'EOF'
-MEP_USER=admin
-MEP_PASSWORD=YourStrongPassword123!
-MEP_SECRET_KEY=generate-a-random-64-char-string-here
-EOF
-chmod 600 /srv/mep/.env
+sudo -u mep git clone https://github.com/Hassan-Amanat-Ali/PDFexrtractor.git /srv/mep/app
 ```
 
-Generate a random secret key:
+The clone must contain `web_app.py`, `requirements_web.txt`, `templates/`,
+`static/`, `taxonomy.json`, and `sets.dxf` directly inside `/srv/mep/app`.
+
+## 5. Create the Python environment
 
 ```bash
-python3 -c "import secrets; print(secrets.token_hex(32))"
+sudo -u mep python3 -m venv /srv/mep/venv
+sudo -u mep /srv/mep/venv/bin/python -m pip install --upgrade pip
+sudo -u mep /srv/mep/venv/bin/pip install -r /srv/mep/app/requirements_web.txt
 ```
 
----
-
-## 5. systemd service
+## 6. Put secrets in `/etc/mep/mep.env`
 
 ```bash
-sudo nano /etc/systemd/system/mep.service
+sudo cp /srv/mep/app/deploy/mep.env.example /etc/mep/mep.env
+sudo chown root:mep /etc/mep/mep.env
+sudo chmod 640 /etc/mep/mep.env
+sudo nano /etc/mep/mep.env
 ```
 
-Paste:
-
-```ini
-[Unit]
-Description=MEP Component Extractor (Flask / Gunicorn)
-After=network.target
-
-[Service]
-User=www-data
-Group=www-data
-WorkingDirectory=/srv/mep
-EnvironmentFile=/srv/mep/.env
-ExecStart=/srv/mep/venv/bin/gunicorn \
-    --workers 1 \
-    --threads 4 \
-    --bind 127.0.0.1:5000 \
-    --timeout 300 \
-    --access-logfile /var/log/mep/access.log \
-    --error-logfile /var/log/mep/error.log \
-    web_app:app
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
+Keep `MEP_USER` as `admin` or choose another login name. Replace
+`MEP_PASSWORD` with a long unique password. Generate the session key on the VPS:
 
 ```bash
-sudo mkdir -p /var/log/mep
-sudo chown www-data:www-data /var/log/mep
-sudo chown -R www-data:www-data /srv/mep
+openssl rand -hex 32
+```
+
+Paste that output after `MEP_SECRET_KEY=`. Do not include spaces around `=`.
+Leave `MEP_UPLOAD_DIR=/srv/mep/uploads` unchanged.
+
+## 7. Install and start the systemd service
+
+```bash
+sudo cp /srv/mep/app/deploy/mep.service /etc/systemd/system/mep.service
 sudo systemctl daemon-reload
-sudo systemctl enable mep
-sudo systemctl start mep
+sudo systemctl enable --now mep
+sudo systemctl status mep --no-pager
+curl -fsS http://127.0.0.1:5000/healthz
 ```
 
-Check it started:
+The final command should print `{"status":"ok"}`. The service deliberately
+uses one process because active job status is stored in process memory; four
+threads keep polling and downloads responsive during analysis.
+
+If it does not start:
 
 ```bash
-sudo systemctl status mep
+sudo journalctl -u mep -n 100 --no-pager
 ```
 
-The app deliberately uses one Gunicorn worker because active jobs are kept in
-process memory. Multiple workers would not share job status. The four worker
-threads allow status and download requests to remain responsive while an
-analysis is running.
-
----
-
-## 6. Nginx reverse proxy
+## 8. Install the Nginx site
 
 ```bash
+sudo cp /srv/mep/app/deploy/nginx.conf /etc/nginx/sites-available/mep
 sudo nano /etc/nginx/sites-available/mep
 ```
 
-Paste (replace `yourdomain.com` with your actual domain or VPS IP):
-
-```nginx
-server {
-    listen 80;
-    server_name yourdomain.com;
-
-    # Increase upload size limit to 100 MB
-    client_max_body_size 100M;
-
-    location / {
-        proxy_pass         http://127.0.0.1:5000;
-        proxy_set_header   Host $host;
-        proxy_set_header   X-Real-IP $remote_addr;
-        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header   X-Forwarded-Proto $scheme;
-        proxy_read_timeout 300;
-        proxy_send_timeout 300;
-    }
-
-    location /static/ {
-        alias /srv/mep/static/;
-        expires 1d;
-    }
-}
-```
-
-Enable and test:
+Change `YOUR_DOMAIN_OR_IP` to the real domain or VPS IP, then enable it:
 
 ```bash
 sudo ln -s /etc/nginx/sites-available/mep /etc/nginx/sites-enabled/mep
+sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
----
+Open `http://YOUR_DOMAIN_OR_IP` and sign in with the values from
+`/etc/mep/mep.env`.
 
-## 7. SSL certificate (Let's Encrypt)
+## 9. Enable the firewall safely
 
-You need a domain name pointing to your VPS IP before this step.
-
-```bash
-sudo certbot --nginx -d yourdomain.com
-```
-
-Certbot will edit your nginx config to add HTTPS and set up auto-renewal. Verify renewal works:
-
-```bash
-sudo certbot renew --dry-run
-```
-
----
-
-## 8. Firewall
+Allow SSH before enabling the firewall so the current SSH route remains open:
 
 ```bash
 sudo ufw allow OpenSSH
 sudo ufw allow 'Nginx Full'
 sudo ufw enable
+sudo ufw status
 ```
 
----
+If the VPS uses a nonstandard SSH port, allow that port before `ufw enable`.
 
-## 9. Updates / redeploy
-
-After uploading new files:
+## 10. Add HTTPS when DNS is working
 
 ```bash
-sudo systemctl restart mep
+sudo certbot --nginx -d YOUR_DOMAIN
+sudo certbot renew --dry-run
 ```
 
----
+Use the HTTPS URL after this succeeds.
 
-## 10. Useful commands
+## Updating the deployed application
+
+After new code has been pushed to GitHub:
+
+```bash
+sudo -u mep git -C /srv/mep/app pull --ff-only
+sudo -u mep /srv/mep/venv/bin/pip install -r /srv/mep/app/requirements_web.txt
+sudo systemctl restart mep
+curl -fsS http://127.0.0.1:5000/healthz
+```
+
+## Useful checks
 
 | Command | Purpose |
 |---|---|
-| `sudo systemctl status mep` | Check service health |
-| `sudo journalctl -u mep -f` | Tail live logs |
-| `sudo tail -f /var/log/mep/error.log` | Gunicorn errors |
-| `sudo systemctl restart mep` | Restart after code changes |
-| `sudo nginx -t && sudo systemctl reload nginx` | Reload nginx config |
-| `curl -fsS http://127.0.0.1:5000/healthz` | Verify the app is responding |
+| `sudo systemctl status mep --no-pager` | Service state |
+| `sudo journalctl -u mep -f` | Live application logs |
+| `curl -fsS http://127.0.0.1:5000/healthz` | Direct app health |
+| `sudo nginx -t` | Validate Nginx configuration |
+| `sudo tail -f /var/log/nginx/error.log` | Nginx errors |
+| `df -h /srv/mep` | Available upload/report disk space |
+| `du -sh /srv/mep/uploads` | Space used by job files |
 
----
-
-## Directory structure on server
-
-```
-/srv/mep/
-├── web_app.py          ← Flask app
-├── pdf_parser.py
-├── vector_analyzer.py
-├── report_generator.py
-├── ml_detector.py
-├── result_combiner.py
-├── taxonomy.json
-├── sets.dxf            ← keep updated here
-├── requirements_web.txt
-├── venv/               ← Python virtualenv
-├── uploads/            ← auto-created, stores per-job PDFs + reports
-├── templates/
-│   ├── base.html
-│   ├── login.html
-│   ├── index.html
-│   ├── waiting.html
-│   ├── results.html
-│   └── error.html
-└── static/
-    └── css/style.css
-```
-
----
-
-## Changing the password
-
-Edit `/srv/mep/.env` and update `MEP_PASSWORD`, then:
-
-```bash
-sudo systemctl restart mep
-```
-
----
-
-## Adding multiple users (optional)
-
-The current setup supports one user. For multiple users, replace the credential check in
-`web_app.py` lines with a dict:
-
-```python
-USERS = {
-    'alice': 'password1',
-    'bob':   'password2',
-}
-# In login route:
-if USERS.get(request.form.get('username')) == request.form.get('password'):
-```
-
-Store the dict in `.env` as JSON or in a simple file — do not hardcode passwords in source.
+Completed job files are not automatically deleted. Monitor
+`/srv/mep/uploads` and add a retention policy once the desired retention period
+is known.

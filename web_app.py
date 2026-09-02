@@ -88,7 +88,9 @@ CATEGORY_COLOURS = {
 
 # ── upload directory ──────────────────────────────────────────────────────────
 
-UPLOAD_DIR = os.path.join(_HERE, 'uploads')
+UPLOAD_DIR = os.path.abspath(
+    os.environ.get('MEP_UPLOAD_DIR', os.path.join(_HERE, 'uploads'))
+)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 DXF_PATH = os.path.join(_HERE, 'sets.dxf')
