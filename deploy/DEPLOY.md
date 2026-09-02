@@ -46,7 +46,13 @@ sudo apt install -y git python3 python3-pip python3-venv nginx ufw certbot pytho
 sudo useradd --system --home-dir /srv/mep --create-home --shell /usr/sbin/nologin mep
 sudo install -d -o mep -g mep -m 0755 /srv/mep/app /srv/mep/uploads
 sudo install -d -o root -g mep -m 0750 /etc/mep
+sudo chmod 0751 /srv/mep
+sudo chmod 0750 /srv/mep/uploads
 ```
+
+The execute-only permission for other users on `/srv/mep` lets the Nginx worker
+reach public files under `/srv/mep/app/static` without allowing it to list the
+application directory. Uploads remain private to the `mep` service account.
 
 If `useradd` says `mep` already exists, continue and run:
 
