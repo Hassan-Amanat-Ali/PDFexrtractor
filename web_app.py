@@ -2,7 +2,7 @@
 MEP Component Extractor — Flask web application.
 
 Start:  python web_app.py
-Prod:   gunicorn -w 2 -b 127.0.0.1:5000 web_app:app
+Prod:   gunicorn -w 1 --threads 4 -b 127.0.0.1:5000 web_app:app
 
 Credentials are set via environment variables:
     MEP_USER       (default: admin)
@@ -126,6 +126,12 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for('login'))
+
+
+@app.route('/healthz')
+def healthz():
+    """Lightweight unauthenticated health check for the reverse proxy."""
+    return jsonify(status='ok')
 
 
 # ── job store ─────────────────────────────────────────────────────────────────

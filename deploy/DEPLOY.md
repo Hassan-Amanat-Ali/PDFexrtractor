@@ -84,7 +84,8 @@ Group=www-data
 WorkingDirectory=/srv/mep
 EnvironmentFile=/srv/mep/.env
 ExecStart=/srv/mep/venv/bin/gunicorn \
-    --workers 2 \
+    --workers 1 \
+    --threads 4 \
     --bind 127.0.0.1:5000 \
     --timeout 300 \
     --access-logfile /var/log/mep/access.log \
@@ -111,6 +112,11 @@ Check it started:
 ```bash
 sudo systemctl status mep
 ```
+
+The app deliberately uses one Gunicorn worker because active jobs are kept in
+process memory. Multiple workers would not share job status. The four worker
+threads allow status and download requests to remain responsive while an
+analysis is running.
 
 ---
 
@@ -202,6 +208,7 @@ sudo systemctl restart mep
 | `sudo tail -f /var/log/mep/error.log` | Gunicorn errors |
 | `sudo systemctl restart mep` | Restart after code changes |
 | `sudo nginx -t && sudo systemctl reload nginx` | Reload nginx config |
+| `curl -fsS http://127.0.0.1:5000/healthz` | Verify the app is responding |
 
 ---
 
