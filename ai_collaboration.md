@@ -333,3 +333,8 @@ The analysis worker exits after every completed job and is restarted by systemd,
 preventing the retained-memory growth observed in the earlier deployment. See
 `ai_working.md` for detailed implementation/test evidence and `deploy/DEPLOY.md`
 for the exact server procedure.
+
+Deployment status: completed on 2026-09-08 from GitHub commit `bfe5a58`.
+Production verification covered persistent cross-worker status, Fast-mode real
+PDF processing, results/report access, Save, queued cancellation and Delete.
+Both `mep` and `mep-worker` services are enabled and active.

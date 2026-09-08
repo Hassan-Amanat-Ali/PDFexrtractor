@@ -681,3 +681,20 @@ Verification performed locally:
   extraction run.
 
 Deployment steps to follow after commit/push are recorded in `deploy/DEPLOY.md`.
+
+Deployment completed on 2026-09-08:
+
+- Pushed implementation commit `bfe5a58` to GitHub `main`.
+- VPS pulled the commit into the real checkout at `/srv/mep/app`.
+- Created `/srv/mep/data` (owner `mep:mep`, mode 0750) and configured the
+  SQLite queue at `/srv/mep/data/jobs.sqlite3`.
+- Installed and enabled `mep.service` (two web workers) and
+  `mep-worker.service` (one analysis worker).
+- Health endpoint, Nginx configuration and both systemd services passed.
+- Authenticated production Fast-mode test completed a real PDF with 168
+  components. Six status requests distributed across web workers all returned
+  HTTP 200; results, report download, dashboard and Save passed.
+- Controlled queued Advanced job returned `cancelled`, then Delete removed its
+  job directory; the analysis worker restarted normally.
+- Post-job resource state: web service about 186 MB, idle analysis worker about
+  62 MB, approximately 1.0 GiB VPS memory available and 51 MiB swap used.
