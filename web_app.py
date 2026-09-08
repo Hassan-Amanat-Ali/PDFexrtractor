@@ -1,427 +1,264 @@
-"""
-MEP Component Extractor — Flask web application.
-
-Start:  python web_app.py
-Prod:   gunicorn -w 1 --threads 4 -b 127.0.0.1:5000 web_app:app
-
-Credentials are set via environment variables:
-    MEP_USER       (default: admin)
-    MEP_PASSWORD   (default: changeme  — CHANGE THIS on the server)
-    MEP_SECRET_KEY (random bytes used for session signing — set a fixed value for prod)
-"""
+"""Persistent web frontend for the MEP Component Extractor."""
 
 from __future__ import annotations
-import io
+
 import json
-import logging
 import os
+import pickle
+import signal
 import sys
-import threading
-import time
-import traceback
 import uuid
 from collections import defaultdict
 from functools import wraps
+from urllib.parse import urljoin, urlparse
 
-from flask import (
-    Flask, abort, redirect, render_template, request,
-    send_file, session, url_for, jsonify,
-)
+from flask import (Flask, abort, jsonify, redirect, render_template, request,
+                   send_file, session, url_for)
 
-# ── project path so imports resolve from the same directory as this file ──────
-_HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, _HERE)
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
 
-from pdf_parser import (
-    ExtractionResult,
-    PYMUPDF_AVAILABLE,
-    components_by_category,
-    extract_from_pdf,
-    total_count,
-)
+from job_store import (artifact_path, create_job, delete_job, get_job, init_store,
+                       job_dir, list_jobs, queue_position, request_cancel, set_saved)
+from pdf_parser import ExtractionResult, components_by_category
 from report_generator import generate_excel, generate_text_report
-from vector_analyzer import (
-    PIL_AVAILABLE,
-    VectorResult,
-    analyze_pdf_vectors,
-    render_page_map,
-)
-from ml_detector import MLResult, detect_components_ml
-from result_combiner import CombinedResult, combine_results
-
-# ── app setup ─────────────────────────────────────────────────────────────────
+from vector_analyzer import VectorResult
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('MEP_SECRET_KEY') or os.urandom(32)
+app.secret_key = os.environ.get("MEP_SECRET_KEY") or os.urandom(32)
+app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MEP_MAX_UPLOAD_MB", "100")) * 1024 * 1024
+MEP_USER = os.environ.get("MEP_USER", "admin")
+MEP_PASSWORD = os.environ.get("MEP_PASSWORD", "changeme")
+TAXONOMY_PATH = os.path.join(HERE, "taxonomy.json")
+with open(TAXONOMY_PATH, encoding="utf-8") as handle:
+    TAXONOMY = json.load(handle)
 
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s %(levelname)s %(message)s')
-log = logging.getLogger(__name__)
-
-# ── taxonomy ──────────────────────────────────────────────────────────────────
-
-_TAXONOMY_PATH = os.path.join(_HERE, 'taxonomy.json')
-
-def _load_taxonomy() -> dict:
-    if os.path.isfile(_TAXONOMY_PATH):
-        with open(_TAXONOMY_PATH, encoding='utf-8') as fh:
-            return json.load(fh)
-    return {}
-
-TAXONOMY = _load_taxonomy()
-
-CATEGORY_ORDER = [
-    'HVAC Equipment', 'Ventilation', 'Fire Safety',
-    'Controls & Sensors', 'Controls', 'Pipework', 'Heating', 'Other',
-]
-
+CATEGORY_ORDER = ["HVAC Equipment", "Ventilation", "Fire Safety",
+                  "Controls & Sensors", "Controls", "Pipework", "Heating", "Other"]
 CATEGORY_COLOURS = {
-    'HVAC Equipment':     '#D6E4F0',
-    'Ventilation':        '#D5F5E3',
-    'Fire Safety':        '#FADBD8',
-    'Controls':           '#FDEBD0',
-    'Controls & Sensors': '#FEF9E7',
-    'Pipework':           '#E8DAEF',
-    'Heating':            '#F9EBEA',
-    'Other':              '#F2F3F4',
-}
-
-# ── upload directory ──────────────────────────────────────────────────────────
-
-UPLOAD_DIR = os.path.abspath(
-    os.environ.get('MEP_UPLOAD_DIR', os.path.join(_HERE, 'uploads'))
-)
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-DXF_PATH = os.path.join(_HERE, 'sets.dxf')
-
-# ── auth ──────────────────────────────────────────────────────────────────────
-
-MEP_USER     = os.environ.get('MEP_USER', 'admin')
-MEP_PASSWORD = os.environ.get('MEP_PASSWORD', 'changeme')
+    "HVAC Equipment": "#D6E4F0", "Ventilation": "#D5F5E3",
+    "Fire Safety": "#FADBD8", "Controls": "#FDEBD0",
+    "Controls & Sensors": "#FEF9E7", "Pipework": "#E8DAEF",
+    "Heating": "#F9EBEA", "Other": "#F2F3F4"}
+init_store()
 
 
-def _login_required(f):
-    @wraps(f)
-    def _inner(*args, **kwargs):
-        if not session.get('logged_in'):
-            return redirect(url_for('login', next=request.path))
-        return f(*args, **kwargs)
-    return _inner
+@app.template_filter("datetime")
+def format_datetime(timestamp) -> str:
+    if not timestamp:
+        return ""
+    from datetime import datetime
+    return datetime.fromtimestamp(float(timestamp)).strftime("%d %b %Y, %H:%M")
 
 
-@app.route('/login', methods=['GET', 'POST'])
+def _login_required(function):
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        if not session.get("logged_in"):
+            return redirect(url_for("login", next=request.path))
+        return function(*args, **kwargs)
+    return wrapped
+
+
+def _owner() -> str:
+    return str(session.get("username", ""))
+
+
+def _safe_next(target: str | None) -> bool:
+    if not target:
+        return False
+    base = urlparse(request.host_url)
+    destination = urlparse(urljoin(request.host_url, target))
+    return destination.scheme in ("http", "https") and base.netloc == destination.netloc
+
+
+def _load_results(job_id: str) -> dict:
+    path = artifact_path(job_id, "results.pkl")
+    if not os.path.isfile(path):
+        abort(404)
+    with open(path, "rb") as handle:
+        return pickle.load(handle)
+
+
+@app.route("/login", methods=["GET", "POST"])
 def login():
     error = None
-    if request.method == 'POST':
-        if (request.form.get('username') == MEP_USER and
-                request.form.get('password') == MEP_PASSWORD):
+    if request.method == "POST":
+        if request.form.get("username") == MEP_USER and request.form.get("password") == MEP_PASSWORD:
             session.permanent = True
-            session['logged_in'] = True
-            session['username'] = request.form.get('username')
-            return redirect(request.args.get('next') or url_for('index'))
-        error = 'Invalid username or password.'
-    return render_template('login.html', error=error)
+            session["logged_in"] = True
+            session["username"] = request.form.get("username")
+            target = request.args.get("next")
+            return redirect(target if _safe_next(target) else url_for("index"))
+        error = "Invalid username or password."
+    return render_template("login.html", error=error)
 
 
-@app.route('/logout')
+@app.route("/logout", methods=["POST"])
 def logout():
     session.clear()
-    return redirect(url_for('login'))
+    return redirect(url_for("login"))
 
 
-@app.route('/healthz')
+@app.route("/healthz")
 def healthz():
-    """Lightweight unauthenticated health check for the reverse proxy."""
-    return jsonify(status='ok')
+    return jsonify(status="ok")
 
 
-# ── job store ─────────────────────────────────────────────────────────────────
-
-jobs: dict[str, dict] = {}
-
-
-def _new_job(filename: str) -> dict:
-    return {
-        'status':    'running',   # running | done | error
-        'stage':     'Starting…',
-        'stage_num': 0,           # 0-5
-        'filename':  filename,
-        'created':   time.time(),
-        's1': None, 's2': None, 's3': None, 's4': None,
-        'error': None,
-        'maps': {},               # int stage → PIL Image
-    }
-
-
-# ── background analysis ───────────────────────────────────────────────────────
-
-def _run_analysis(job_id: str, input_path: str, ext: str) -> None:
-    job = jobs[job_id]
-    try:
-        # Stage 1 — text extraction
-        job['stage'] = 'Stage 1 / 4  —  Extracting text from drawing…'
-        job['stage_num'] = 1
-        if ext == '.pdf':
-            s1: ExtractionResult = extract_from_pdf(input_path)
-        else:
-            from pdf_parser import extract_from_dxf
-            s1 = extract_from_dxf(input_path)
-        job['s1'] = s1
-        log.info('[%s] Stage 1 complete — %d components', job_id[:8], total_count(s1))
-
-        # Stage 2 — vector / DXF analysis
-        job['stage'] = 'Stage 2 / 4  —  Analysing vector paths and DXF fingerprints…'
-        job['stage_num'] = 2
-        if ext == '.pdf' and PYMUPDF_AVAILABLE:
-            s2: VectorResult = analyze_pdf_vectors(
-                input_path,
-                dxf_path=DXF_PATH if os.path.isfile(DXF_PATH) else None,
-            )
-        else:
-            s2 = VectorResult(source_file=os.path.basename(input_path))
-        job['s2'] = s2
-        log.info('[%s] Stage 2 complete — %d clusters', job_id[:8],
-                 len(s2.labelled_clusters) + len(s2.unlabelled_clusters))
-
-        # Stage 3 — ML detection
-        job['stage'] = 'Stage 3 / 4  —  Running ML symbol detection…'
-        job['stage_num'] = 3
-        if ext == '.pdf' and PYMUPDF_AVAILABLE:
-            s3: MLResult = detect_components_ml(input_path)
-        else:
-            s3 = MLResult(source_file=os.path.basename(input_path))
-        job['s3'] = s3
-
-        # Stage 4 — combine
-        job['stage'] = 'Stage 4 / 4  —  Combining all results…'
-        job['stage_num'] = 4
-        s4: CombinedResult = combine_results(s1, s2, s3)
-        job['s4'] = s4
-
-        # Render map images
-        job['stage'] = 'Rendering annotated maps…'
-        if PIL_AVAILABLE and ext == '.pdf':
-            for stg, show_unl, lbl in [(1, False, 'Stage 1'), (2, True, 'Stage 2')]:
-                img = render_page_map(
-                    input_path, s2, TAXONOMY,
-                    page_num=0,
-                    show_unlabelled=show_unl,
-                    stage_label=lbl,
-                )
-                if img is not None:
-                    job['maps'][stg] = img
-
-        job['status'] = 'done'
-        job['stage'] = 'Complete'
-        job['stage_num'] = 5
-        log.info('[%s] Analysis complete', job_id[:8])
-
-    except Exception as exc:
-        job['status'] = 'error'
-        job['error'] = str(exc)
-        log.error('[%s] Analysis failed: %s\n%s', job_id[:8], exc, traceback.format_exc())
-
-
-# ── routes ────────────────────────────────────────────────────────────────────
-
-@app.route('/')
+@app.route("/")
 @_login_required
 def index():
-    return render_template('index.html', username=session.get('username', ''))
+    jobs = list_jobs(_owner())
+    for job in jobs:
+        job["queue_position"] = queue_position(job["id"]) if job["status"] == "queued" else 0
+    return render_template("index.html", username=_owner(), jobs=jobs)
 
 
-@app.route('/upload', methods=['POST'])
+@app.route("/upload", methods=["POST"])
 @_login_required
 def upload():
-    f = request.files.get('file')
-    if not f or not f.filename:
-        return jsonify(error='No file received.'), 400
-
-    ext = os.path.splitext(f.filename)[1].lower()
-    if ext not in ('.pdf', '.dxf'):
-        return jsonify(error='Only PDF and DXF files are supported.'), 400
-
-    job_id  = str(uuid.uuid4())
-    job_dir = os.path.join(UPLOAD_DIR, job_id)
-    os.makedirs(job_dir, exist_ok=True)
-
-    safe_name  = 'input' + ext
-    input_path = os.path.join(job_dir, safe_name)
-    f.save(input_path)
-    log.info('[%s] Saved upload: %s (%d bytes)',
-             job_id[:8], f.filename, os.path.getsize(input_path))
-
-    jobs[job_id] = _new_job(f.filename)
-    threading.Thread(
-        target=_run_analysis, args=(job_id, input_path, ext), daemon=True
-    ).start()
-
-    return jsonify(job_id=job_id)
+    uploaded = request.files.get("file")
+    if not uploaded or not uploaded.filename:
+        return jsonify(error="No file received."), 400
+    extension = os.path.splitext(uploaded.filename)[1].lower()
+    if extension not in (".pdf", ".dxf"):
+        return jsonify(error="Only PDF and DXF files are supported."), 400
+    mode = request.form.get("mode", "fast")
+    mode = mode if mode in ("fast", "advanced") else "fast"
+    job_id = str(uuid.uuid4())
+    os.makedirs(job_dir(job_id), mode=0o750)
+    uploaded.save(artifact_path(job_id, "input" + extension))
+    create_job(job_id, _owner(), uploaded.filename, extension, mode)
+    return jsonify(job_id=job_id, status="queued")
 
 
-@app.route('/status/<job_id>')
+@app.route("/status/<job_id>")
 @_login_required
 def status(job_id):
-    job = jobs.get(job_id)
+    job = get_job(job_id, _owner())
     if not job:
-        return jsonify(error='Unknown job.'), 404
-    return jsonify(
-        status=job['status'],
-        stage=job['stage'],
-        stage_num=job['stage_num'],
-        error=job.get('error'),
-    )
+        return jsonify(error="Unknown job."), 404
+    return jsonify(status=job["status"], stage=job["stage"], stage_num=job["stage_num"],
+                   error=job["error"],
+                   queue_position=queue_position(job_id) if job["status"] == "queued" else 0)
 
 
-@app.route('/results/<job_id>')
+@app.route("/results/<job_id>")
 @_login_required
 def results(job_id):
-    job = jobs.get(job_id)
+    job = get_job(job_id, _owner())
     if not job:
         abort(404)
-
-    if job['status'] == 'running':
-        return render_template('waiting.html',
-                               job_id=job_id,
-                               filename=job['filename'])
-
-    if job['status'] == 'error':
-        return render_template('error.html',
-                               error=job['error'],
-                               filename=job['filename'])
-
-    s1: ExtractionResult = job['s1']
-    s2: VectorResult     = job['s2']
-
-    # Build grouped component rows for the HTML table
-    grouped  = components_by_category(s1, TAXONOMY)
-    rows: list[dict] = []
-    grand_total = 0
-
-    for cat in CATEGORY_ORDER:
-        items = grouped.get(cat, [])
-        for item in items:
-            rows.append({
-                'cat':       cat,
-                'colour':    CATEGORY_COLOURS.get(cat, '#F2F3F4'),
-                'code':      item.get('code', ''),
-                'full_name': item.get('full_name', ''),
-                'ids':       item.get('ids', ''),
-                'count':     item.get('count', 0),
-            })
-            grand_total += item.get('count', 0)
-
-    # Unlabelled ATT/XTA from Layer C (vector fingerprint)
-    unlab_att_xta = [
-        c for c in (s2.unlabelled_clusters if s2 else [])
-        if c.fingerprint_code in ('ATT', 'XTA')
-    ]
-
-    has_map = bool(job.get('maps'))
-
-    return render_template(
-        'results.html',
-        job_id=job_id,
-        filename=job['filename'],
-        rows=rows,
-        grand_total=grand_total,
-        unlab=unlab_att_xta,
-        has_map=has_map,
-        taxonomy=TAXONOMY,
-        drawing_number=getattr(s1, 'drawing_number', None),
-        floor_level=getattr(s1, 'floor_level', None),
-        username=session.get('username', ''),
-    )
+    if job["status"] in ("queued", "running"):
+        return render_template("waiting.html", job_id=job_id, filename=job["filename"], username=_owner())
+    if job["status"] == "cancelled":
+        return render_template("error.html", error="This analysis was cancelled.",
+                               filename=job["filename"], username=_owner())
+    if job["status"] == "failed":
+        return render_template("error.html", error=job["error"], filename=job["filename"], username=_owner())
+    if job["status"] != "complete":
+        abort(404)
+    bundle = _load_results(job_id)
+    s1: ExtractionResult = bundle["s1"]
+    s2: VectorResult = bundle["s2"]
+    grouped = components_by_category(s1, TAXONOMY)
+    rows, grand_total = [], 0
+    for category in CATEGORY_ORDER:
+        for item in grouped.get(category, []):
+            ids = item.get("ids", "")
+            rows.append({"cat": category, "colour": CATEGORY_COLOURS.get(category, "#F2F3F4"),
+                         "code": item.get("code", ""), "full_name": item.get("full_name", ""),
+                         "ids": ", ".join(ids) if isinstance(ids, list) else ids,
+                         "count": item.get("count", 0)})
+            grand_total += item.get("count", 0)
+    unlabelled = [cluster for cluster in (s2.unlabelled_clusters if s2 else [])
+                  if cluster.fingerprint_code in ("ATT", "XTA")]
+    return render_template("results.html", job_id=job_id, filename=job["filename"], rows=rows,
+        grand_total=grand_total, unlab=unlabelled, has_map=bool(bundle.get("maps")),
+        taxonomy=TAXONOMY, drawing_number=getattr(s1, "drawing_number", None),
+        floor_level=getattr(s1, "floor_level", None), username=_owner(), job=job)
 
 
-@app.route('/map/<job_id>/<int:stage>')
+@app.route("/map/<job_id>/<int:stage>")
 @_login_required
 def serve_map(job_id, stage):
-    job = jobs.get(job_id)
-    if not job:
+    if not get_job(job_id, _owner()) or stage not in (1, 2):
         abort(404)
-    img = job.get('maps', {}).get(stage)
-    if img is None:
+    path = artifact_path(job_id, f"map-{stage}.png")
+    if not os.path.isfile(path):
         abort(404)
-    buf = io.BytesIO()
-    img.save(buf, format='PNG')
-    buf.seek(0)
-    return send_file(buf, mimetype='image/png')
+    return send_file(path, mimetype="image/png")
 
 
-@app.route('/positions/<job_id>')
+@app.route("/positions/<job_id>")
 @_login_required
 def positions(job_id):
-    """Return all component bounding boxes as JSON for client-side highlighting."""
-    job = jobs.get(job_id)
-    if not job or job['status'] != 'done':
-        return jsonify(error='Not ready.'), 404
-
-    s2: VectorResult = job['s2']
-    MAP_DPI   = 100
-    scale     = MAP_DPI / 72.0   # matches render_page_map dpi=100
-
-    by_code: dict = defaultdict(list)
-
-    for pc in (s2.positioned_components if s2 else []):
-        bbox = pc.symbol_bbox or pc.bbox   # prefer actual symbol body
-        x0, y0, x1, y1 = bbox
-        by_code[pc.component_type].append({
-            'id':   pc.component_id,
-            'page': pc.page_num,
-            'x0':   round(x0 * scale, 1),
-            'y0':   round(y0 * scale, 1),
-            'x1':   round(x1 * scale, 1),
-            'y1':   round(y1 * scale, 1),
-        })
-
-    for cl in (s2.unlabelled_clusters if s2 else []):
-        code = cl.fingerprint_code or 'Unknown'
-        x0, y0, x1, y1 = cl.bbox
-        by_code[code].append({
-            'id':        f'{code}-unlabelled',
-            'page':      cl.page_num,
-            'x0':        round(x0 * scale, 1),
-            'y0':        round(y0 * scale, 1),
-            'x1':        round(x1 * scale, 1),
-            'y1':        round(y1 * scale, 1),
-            'unlabelled': True,
-        })
-
+    job = get_job(job_id, _owner())
+    if not job or job["status"] != "complete":
+        return jsonify(error="Not ready."), 404
+    s2: VectorResult = _load_results(job_id)["s2"]
+    scale, by_code = 100 / 72.0, defaultdict(list)
+    for component in s2.positioned_components if s2 else []:
+        x0, y0, x1, y1 = component.symbol_bbox or component.bbox
+        by_code[component.component_type].append({"id": component.component_id,
+            "page": component.page_num, "x0": round(x0 * scale, 1),
+            "y0": round(y0 * scale, 1), "x1": round(x1 * scale, 1),
+            "y1": round(y1 * scale, 1)})
     return jsonify(scale=scale, components=dict(by_code))
 
 
-@app.route('/download/<job_id>/<fmt>')
+@app.route("/download/<job_id>/<fmt>")
 @_login_required
 def download(job_id, fmt):
-    job = jobs.get(job_id)
-    if not job or job['status'] != 'done':
+    job = get_job(job_id, _owner())
+    if not job or job["status"] != "complete":
         abort(404)
-
-    job_dir  = os.path.join(UPLOAD_DIR, job_id)
-    s1: ExtractionResult = job['s1']
-    s4: CombinedResult   = job.get('s4')
-    stem = os.path.splitext(job['filename'])[0]
-
-    if fmt == 'excel':
-        out_path = os.path.join(job_dir, 'report.xlsx')
-        generate_excel(s1, out_path,
-                       taxonomy_path=_TAXONOMY_PATH,
-                       combined_result=s4)
-        return send_file(out_path, as_attachment=True,
-                         download_name=f'{stem}_report.xlsx')
-
-    if fmt == 'text':
-        out_path = os.path.join(job_dir, 'report.txt')
-        generate_text_report(s1, out_path, taxonomy_path=_TAXONOMY_PATH)
-        return send_file(out_path, as_attachment=True,
-                         download_name=f'{stem}_report.txt')
-
+    bundle, stem = _load_results(job_id), os.path.splitext(job["filename"])[0]
+    if fmt == "excel":
+        path = artifact_path(job_id, "report.xlsx")
+        if not os.path.isfile(path):
+            generate_excel(bundle["s1"], path, taxonomy_path=TAXONOMY_PATH,
+                           combined_result=bundle.get("s4"))
+        return send_file(path, as_attachment=True, download_name=f"{stem}_report.xlsx")
+    if fmt == "text":
+        path = artifact_path(job_id, "report.txt")
+        if not os.path.isfile(path):
+            generate_text_report(bundle["s1"], path, taxonomy_path=TAXONOMY_PATH)
+        return send_file(path, as_attachment=True, download_name=f"{stem}_report.txt")
     abort(400)
 
 
-# ── dev server ────────────────────────────────────────────────────────────────
+@app.route("/jobs/<job_id>/cancel", methods=["POST"])
+@_login_required
+def cancel_job(job_id):
+    job = request_cancel(job_id, _owner())
+    if not job:
+        abort(404)
+    if job.get("worker_pid"):
+        try:
+            os.kill(int(job["worker_pid"]), signal.SIGTERM)
+        except (OSError, ProcessLookupError, PermissionError):
+            pass
+    return redirect(url_for("index"))
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+
+@app.route("/jobs/<job_id>/save", methods=["POST"])
+@_login_required
+def save_job(job_id):
+    job = get_job(job_id, _owner())
+    if not job:
+        abort(404)
+    set_saved(job_id, _owner(), not bool(job["saved"]))
+    return redirect(request.referrer or url_for("index"))
+
+
+@app.route("/jobs/<job_id>/delete", methods=["POST"])
+@_login_required
+def remove_job(job_id):
+    if not delete_job(job_id, _owner()):
+        return jsonify(error="Cancel a running job before deleting it."), 409
+    return redirect(url_for("index"))
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)

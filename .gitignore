@@ -3,6 +3,7 @@ __pycache__/
 dist/
 build/
 uploads/
+data/
 samples/
 training_data/
 newprojecttdbank/

@@ -100,6 +100,16 @@
     <a href="{{ url_for('index') }}" class="btn btn-ghost">New analysis</a>
   </div>
 </div>
+{% if job %}
+<div class="result-actions card">
+  <form method="post" action="{{ url_for('save_job', job_id=job_id) }}">
+    <button class="btn btn-ghost">{{ 'Remove from saved' if job.saved else 'Save result' }}</button>
+  </form>
+  <form method="post" action="{{ url_for('remove_job', job_id=job_id) }}" onsubmit="return confirm('Delete this result and all generated files?')">
+    <button class="btn btn-danger">Delete result</button>
+  </form>
+</div>
+{% endif %}
 
 <!-- ── Map panel ─────────────────────────────────────────────────────────── -->
 {% if has_map %}

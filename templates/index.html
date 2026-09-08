@@ -1,106 +1,88 @@
 {% extends "base.html" %}
-{% block title %}Upload — MEP Extractor{% endblock %}
+{% block title %}Jobs - MEP Extractor{% endblock %}
 
 {% block content %}
-<div class="upload-wrap">
-  <h2>Upload Drawing</h2>
-  <p class="hint">Accepted formats: <strong>PDF</strong>, <strong>DXF</strong></p>
+<div class="dashboard-grid">
+  <section class="card upload-card">
+    <h2>Upload drawing</h2>
+    <p class="hint">PDF or DXF, up to 100 MB. Jobs run one at a time.</p>
+    <div id="drop-zone" class="drop-zone">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <p>Drop a file here or <label class="link-btn" for="file-input">browse</label></p>
+      <input id="file-input" type="file" accept=".pdf,.dxf" hidden>
+      <p id="chosen-name" class="chosen-name"></p>
+    </div>
+    <fieldset class="mode-picker">
+      <legend>Analysis mode</legend>
+      <label><input type="radio" name="mode" value="fast" checked>
+        <span><strong>Fast</strong><small>Text counts and reports, usually seconds</small></span></label>
+      <label><input type="radio" name="mode" value="advanced">
+        <span><strong>Advanced</strong><small>Add vector matching and maps; may take minutes</small></span></label>
+    </fieldset>
+    <button id="start-btn" class="btn btn-primary" disabled>Queue analysis</button>
+    <div id="upload-progress" class="progress-wrap" hidden>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      <p id="progress-label">Uploading...</p>
+    </div>
+    <div id="error-msg" class="alert alert-error" hidden></div>
+  </section>
 
-  <div id="drop-zone" class="drop-zone">
-    <svg width="48" height="48" viewBox="0 0 24 24" fill="none"
-         stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-      <polyline points="17 8 12 3 7 8"/>
-      <line x1="12" y1="3" x2="12" y2="15"/>
-    </svg>
-    <p>Drag &amp; drop a file here, or<br>
-       <label class="link-btn" for="file-input">browse</label>
-    </p>
-    <input id="file-input" type="file" accept=".pdf,.dxf" hidden>
-    <p id="chosen-name" class="chosen-name"></p>
-  </div>
-
-  <button id="start-btn" class="btn btn-primary" disabled>Start Analysis</button>
-
-  <div id="upload-progress" class="progress-wrap" hidden>
-    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-    <p id="progress-label">Uploading…</p>
-  </div>
-
-  <div id="error-msg" class="alert alert-error" hidden></div>
+  <section class="card jobs-card">
+    <div class="section-heading"><div><h2>Analysis jobs</h2><p class="hint">Refresh-safe queue and result history</p></div>
+      <button class="btn btn-ghost btn-sm" onclick="location.reload()">Refresh</button></div>
+    {% if jobs %}
+    <div class="jobs-list">
+      {% for job in jobs %}
+      <article class="job-row">
+        <div class="job-main">
+          <div class="job-title">{{ job.filename }}</div>
+          <div class="job-meta">{{ job.mode|title }} · {{ job.created_at|datetime }}</div>
+          <div class="job-stage">{{ job.stage }}{% if job.queue_position %} · position {{ job.queue_position }}{% endif %}</div>
+        </div>
+        <span class="status status-{{ job.status }}">{{ job.status }}</span>
+        <div class="job-actions">
+          {% if job.status in ('queued', 'running') %}
+            <a class="btn btn-primary btn-sm" href="{{ url_for('results', job_id=job.id) }}">View</a>
+            <form method="post" action="{{ url_for('cancel_job', job_id=job.id) }}"><button class="btn btn-warning btn-sm">Cancel</button></form>
+          {% elif job.status == 'complete' %}
+            <a class="btn btn-primary btn-sm" href="{{ url_for('results', job_id=job.id) }}">Results</a>
+            <form method="post" action="{{ url_for('save_job', job_id=job.id) }}"><button class="btn btn-ghost btn-sm">{{ 'Unsave' if job.saved else 'Save' }}</button></form>
+            <form method="post" action="{{ url_for('remove_job', job_id=job.id) }}" onsubmit="return confirm('Delete this job and all files?')"><button class="btn btn-danger btn-sm">Delete</button></form>
+          {% else %}
+            <a class="btn btn-ghost btn-sm" href="{{ url_for('results', job_id=job.id) }}">Details</a>
+            <form method="post" action="{{ url_for('remove_job', job_id=job.id) }}" onsubmit="return confirm('Delete this job and all files?')"><button class="btn btn-danger btn-sm">Delete</button></form>
+          {% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}<div class="empty-state">No analyses yet. Upload a drawing to begin.</div>{% endif %}
+  </section>
 </div>
 
 <script>
-const dropZone  = document.getElementById('drop-zone');
-const fileInput = document.getElementById('file-input');
-const startBtn  = document.getElementById('start-btn');
-const chosenName = document.getElementById('chosen-name');
-const progressWrap = document.getElementById('upload-progress');
-const progressFill = document.getElementById('progress-fill');
-const progressLabel = document.getElementById('progress-label');
-const errorMsg  = document.getElementById('error-msg');
-
-let selectedFile = null;
-
-function setFile(file) {
-  selectedFile = file;
-  chosenName.textContent = file.name;
-  startBtn.disabled = false;
-  dropZone.classList.add('has-file');
-}
-
-fileInput.addEventListener('change', () => {
-  if (fileInput.files.length) setFile(fileInput.files[0]);
+const dropZone=document.getElementById('drop-zone'), fileInput=document.getElementById('file-input');
+const startBtn=document.getElementById('start-btn'), chosenName=document.getElementById('chosen-name');
+const progressWrap=document.getElementById('upload-progress'), progressFill=document.getElementById('progress-fill');
+const progressLabel=document.getElementById('progress-label'), errorMsg=document.getElementById('error-msg');
+let selectedFile=null;
+function setFile(file){selectedFile=file;chosenName.textContent=file.name;startBtn.disabled=false;dropZone.classList.add('has-file');}
+fileInput.addEventListener('change',()=>fileInput.files.length&&setFile(fileInput.files[0]));
+dropZone.addEventListener('click',e=>{if(e.target.tagName!=='LABEL')fileInput.click();});
+dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('drag-over');});
+dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('drag-over');if(e.dataTransfer.files.length)setFile(e.dataTransfer.files[0]);});
+startBtn.addEventListener('click',()=>{
+  if(!selectedFile)return; startBtn.disabled=true; errorMsg.hidden=true; progressWrap.hidden=false;
+  const form=new FormData();form.append('file',selectedFile);form.append('mode',document.querySelector('input[name=mode]:checked').value);
+  const xhr=new XMLHttpRequest();xhr.open('POST','/upload');
+  xhr.upload.onprogress=e=>{if(e.lengthComputable){progressFill.style.width=Math.round(e.loaded/e.total*100)+'%';progressLabel.textContent='Uploading... '+Math.round(e.loaded/e.total*100)+'%';}};
+  xhr.onload=()=>{let data={};try{data=JSON.parse(xhr.responseText);}catch(e){}if(xhr.status===200&&data.job_id){location.href='/results/'+data.job_id;}else{errorMsg.textContent=data.error||'Upload failed.';errorMsg.hidden=false;progressWrap.hidden=true;startBtn.disabled=false;}};
+  xhr.onerror=()=>{errorMsg.textContent='Network error during upload.';errorMsg.hidden=false;progressWrap.hidden=true;startBtn.disabled=false;};xhr.send(form);
 });
-
-dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('drag-over'));
-dropZone.addEventListener('drop', e => {
-  e.preventDefault();
-  dropZone.classList.remove('drag-over');
-  if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
-});
-
-startBtn.addEventListener('click', () => {
-  if (!selectedFile) return;
-  errorMsg.hidden = true;
-  startBtn.disabled = true;
-  progressWrap.hidden = false;
-
-  const data = new FormData();
-  data.append('file', selectedFile);
-
-  const xhr = new XMLHttpRequest();
-  xhr.upload.addEventListener('progress', e => {
-    if (e.lengthComputable) {
-      const pct = Math.round(e.loaded / e.total * 100);
-      progressFill.style.width = pct + '%';
-      progressLabel.textContent = `Uploading… ${pct}%`;
-    }
-  });
-  xhr.addEventListener('load', () => {
-    if (xhr.status === 200) {
-      const { job_id } = JSON.parse(xhr.responseText);
-      progressLabel.textContent = 'Upload complete — starting analysis…';
-      progressFill.style.width = '100%';
-      window.location.href = '/results/' + job_id;
-    } else {
-      let msg = 'Upload failed.';
-      try { msg = JSON.parse(xhr.responseText).error || msg; } catch(_) {}
-      showError(msg);
-    }
-  });
-  xhr.addEventListener('error', () => showError('Network error. Please try again.'));
-
-  xhr.open('POST', '/upload');
-  xhr.send(data);
-});
-
-function showError(msg) {
-  errorMsg.textContent = msg;
-  errorMsg.hidden = false;
-  progressWrap.hidden = true;
-  startBtn.disabled = false;
-}
+{% if jobs|selectattr('status','in',['queued','running'])|list %}setTimeout(()=>location.reload(),10000);{% endif %}
 </script>
 {% endblock %}

@@ -66,6 +66,8 @@ a:hover { text-decoration: underline; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 
 .btn-primary { background: #3b82f6; color: #fff; }
+.btn-warning { background: #f59e0b; color: #111827; }
+.btn-danger  { background: #dc2626; color: #fff; }
 .btn-ghost   { background: transparent; color: #374151;
                border: 1px solid #d1d5db; }
 .btn-sm      { padding: 5px 12px; font-size: .82rem; }
@@ -141,6 +143,44 @@ a:hover { text-decoration: underline; }
 .progress-bar  { height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; }
 .progress-fill { height: 100%; background: #3b82f6; width: 0; transition: width .3s; }
 .progress-wrap p { font-size: .85rem; color: #6b7280; margin-top: 6px; }
+
+/* persistent job dashboard */
+.dashboard-grid { display: grid; grid-template-columns: minmax(300px, 420px) 1fr; gap: 24px; align-items: start; }
+.upload-card { position: sticky; top: 76px; }
+.mode-picker { border: 0; margin: 18px 0; display: grid; gap: 9px; }
+.mode-picker legend { font-weight: 700; margin-bottom: 8px; }
+.mode-picker label { display: flex; gap: 10px; padding: 10px; border: 1px solid #dbe3ee; border-radius: 8px; cursor: pointer; }
+.mode-picker small { display: block; color: #6b7280; margin-top: 2px; }
+.section-heading, .result-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.jobs-list { display: grid; gap: 10px; margin-top: 18px; }
+.job-row { border: 1px solid #e5e7eb; border-radius: 9px; padding: 14px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px 16px; }
+.job-title { font-weight: 700; overflow-wrap: anywhere; }
+.job-meta, .job-stage { color: #6b7280; font-size: .8rem; margin-top: 3px; }
+.job-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 7px; }
+.job-actions form, .result-actions form, .topbar form, .waiting-actions form { display: inline-flex; }
+.status { align-self: start; border-radius: 999px; padding: 4px 9px; font-size: .72rem; font-weight: 700; text-transform: uppercase; }
+.status-queued { background: #fef3c7; color: #92400e; }
+.status-running { background: #dbeafe; color: #1d4ed8; }
+.status-complete { background: #dcfce7; color: #166534; }
+.status-failed, .status-cancelled { background: #fee2e2; color: #991b1b; }
+.empty-state { color: #6b7280; text-align: center; padding: 46px 10px; }
+.waiting-card { max-width: 560px; margin: 70px auto; text-align: center; }
+.spinner { width: 48px; height: 48px; border: 4px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 22px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.stage-steps { display: flex; justify-content: center; gap: 8px; margin: 24px 0; }
+.step { width: 42px; height: 7px; border-radius: 4px; background: #e5e7eb; }
+.step.done { background: #2563eb; } .step.active { background: #93c5fd; }
+.stage-label, .queue-label { color: #374151; margin-top: 8px; }
+.waiting-actions { display: flex; justify-content: center; gap: 10px; margin-top: 24px; }
+.result-actions { justify-content: flex-end; }
+
+@media (max-width: 800px) {
+  .dashboard-grid { grid-template-columns: 1fr; }
+  .upload-card { position: static; }
+  .topbar { height: auto; padding: 10px 14px; gap: 8px; }
+  .user-label { display: none; }
+  .content { padding: 20px 12px; }
+}
 
 /* ── error page ──────────────────────────────────────────────────────────── */
 .error-pre {

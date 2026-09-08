@@ -15,8 +15,8 @@
     </div>
     <div class="topbar-right">
       <span class="user-label">{{ username }}</span>
-      <a href="{{ url_for('index') }}" class="btn btn-sm btn-ghost">New Analysis</a>
-      <a href="{{ url_for('logout') }}" class="btn btn-sm btn-ghost">Log out</a>
+      <a href="{{ url_for('index') }}" class="btn btn-sm btn-ghost topbar-btn">Jobs</a>
+      <form method="post" action="{{ url_for('logout') }}"><button class="btn btn-sm btn-ghost topbar-btn">Log out</button></form>
     </div>
   </header>
   {% endif %}

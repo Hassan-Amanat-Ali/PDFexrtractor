@@ -1,6 +1,6 @@
 [Unit]
-Description=MEP Component Extractor Web
-After=network-online.target
+Description=MEP Component Extractor Analysis Worker
+After=network-online.target mep.service
 Wants=network-online.target
 
 [Service]
@@ -9,10 +9,13 @@ User=mep
 Group=mep
 WorkingDirectory=/srv/mep/app
 EnvironmentFile=/etc/mep/mep.env
-ExecStart=/srv/mep/venv/bin/gunicorn --workers 2 --threads 2 --bind 127.0.0.1:5000 --timeout 60 --graceful-timeout 30 --access-logfile - --error-logfile - web_app:app
-Restart=on-failure
-RestartSec=5
-TimeoutStopSec=45
+ExecStart=/srv/mep/venv/bin/python /srv/mep/app/analysis_worker.py
+Restart=always
+RestartSec=2
+TimeoutStopSec=20
+Nice=10
+MemoryHigh=1100M
+MemoryMax=1300M
 UMask=0027
 NoNewPrivileges=true
 PrivateTmp=true
